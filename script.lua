@@ -15,6 +15,7 @@ if pg:FindFirstChild("DarkfulBQMStreetUI") then
 end
 
 local KEYS_URL = "https://raw.githubusercontent.com/ali14almoot-cell/key/refs/heads/main/key"
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1573011451206176879/3CIjKfCC-tu197kkXX5DQAd10zYqqQix8r9gdK6GcjEA6JY-MSgovt-ysa4dF3q6Z_Iw"
 local SAVE_FILE = "DarkDestroyer_KeyState_" .. tostring(LP.UserId) .. ".json"
 
 local keysDb = {
@@ -83,6 +84,51 @@ local function loadRemoteKeys()
 end
 
 task.spawn(loadRemoteKeys)
+
+local function getHttpFunc()
+	if type(syn) == "table" and type(syn.request) == "function" then
+		return syn.request
+	elseif type(http_request) == "function" then
+		return http_request
+	elseif type(request) == "function" then
+		return request
+	end
+	return nil
+end
+
+local function sendKeyWebhook(keyUsed, remText)
+	local reqFunc = getHttpFunc()
+	if not reqFunc or WEBHOOK_URL == "" then
+		return
+	end
+	task.spawn(function()
+		local payload = {
+			content = "**DARK DESTROYER KEY LOG**",
+			embeds = {{
+				title = "Key Activated",
+				color = 15407656,
+				fields = {
+					{name = "Player", value = tostring(LP.Name) .. " (" .. tostring(LP.UserId) .. ")", inline = true},
+					{name = "Key", value = tostring(keyUsed), inline = true},
+					{name = "Remaining", value = tostring(remText), inline = true},
+					{name = "PlaceId", value = tostring(game.PlaceId), inline = true},
+					{name = "JobId", value = tostring(game.JobId), inline = false}
+				},
+				timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+			}}
+		}
+		pcall(function()
+			reqFunc({
+				Url = WEBHOOK_URL,
+				Method = "POST",
+				Headers = {
+					["Content-Type"] = "application/json"
+				},
+				Body = HttpService:JSONEncode(payload)
+			})
+		end)
+	end)
+end
 
 local function readSavedState()
 	if type(isfile) == "function" and type(readfile) == "function" then
@@ -903,6 +949,7 @@ local function checkKeyEntry()
 			KeyBadge.Text = tStr
 			TopTimerLbl.Text = tStr
 			TopTimerBar.Visible = true
+			sendKeyWebhook(entry.key, tStr)
 			realPass = ""
 			Pass.Text = ""
 			Auth.Visible = false
