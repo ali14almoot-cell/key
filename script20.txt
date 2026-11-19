@@ -1,0 +1,210 @@
+local Players, UIS, RunService = game:GetService("Players"), game:GetService("UserInputService"), game:GetService("RunService")
+local LP = Players.LocalPlayer
+local pg = LP:WaitForChild("PlayerGui", 10)
+if not pg then return end
+if pg:FindFirstChild("TestKey20UI") then pg.TestKey20UI:Destroy() end
+
+local SG = Instance.new("ScreenGui", pg)
+SG.Name, SG.ResetOnSpawn, SG.IgnoreGuiInset, SG.DisplayOrder, SG.ZIndexBehavior = "TestKey20UI", false, true, 999999, Enum.ZIndexBehavior.Sibling
+
+local function drag(top, gui)
+	local d, inp, s0, p0
+	top.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			d, s0, p0 = true, i.Position, gui.Position
+			i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then d = false end end)
+		end
+	end)
+	top.InputChanged:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then inp = i end
+	end)
+	UIS.InputChanged:Connect(function(i)
+		if i == inp and d then
+			local delta = i.Position - s0
+			gui.Position = UDim2.new(p0.X.Scale, p0.X.Offset + delta.X, p0.Y.Scale, p0.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+local function ui(cls, props, rad, col, thick)
+	local o = Instance.new(cls, props.Parent)
+	for k, v in pairs(props) do if k ~= "Parent" then o[k] = v end end
+	if rad then Instance.new("UICorner", o).CornerRadius = UDim.new(0, rad) end
+	if col then local st = Instance.new("UIStroke", o); st.Color = col; if thick then st.Thickness = thick end end
+	return o
+end
+
+local Red, Dark, Card = Color3.fromRGB(235, 22, 40), Color3.fromRGB(9, 9, 14), Color3.fromRGB(16, 16, 25)
+
+local Auth = ui("Frame", {Parent = SG, Size = UDim2.new(0, 344, 0, 224), Position = UDim2.new(0.5, -172, 0.5, -112), BackgroundColor3 = Color3.fromRGB(11, 11, 17), BorderSizePixel = 0, Active = true}, 18, Red, 2.2)
+ui("TextLabel", {Parent = Auth, Size = UDim2.new(1, -24, 0, 38), Position = UDim2.new(0, 12, 0, 12), BackgroundTransparency = 1, Text = "KEY 20  |  TEST UI", TextColor3 = Color3.fromRGB(255, 55, 70), TextSize = 15, Font = Enum.Font.GothamBlack})
+local Pass = ui("TextBox", {Parent = Auth, Size = UDim2.new(1, -44, 0, 42), Position = UDim2.new(0, 22, 0, 58), BackgroundColor3 = Color3.fromRGB(19, 19, 29), PlaceholderText = "Enter Key (20)", PlaceholderColor3 = Color3.fromRGB(135, 135, 150), Text = "", TextColor3 = Color3.new(1, 1, 1), TextSize = 14, Font = Enum.Font.GothamBold, ClearTextOnFocus = false}, 12, Color3.fromRGB(115, 16, 26), 1.4)
+local Enter = ui("TextButton", {Parent = Auth, Size = UDim2.new(1, -44, 0, 42), Position = UDim2.new(0, 22, 0, 110), BackgroundColor3 = Color3.fromRGB(215, 18, 36), Text = "ACTIVATE", TextColor3 = Color3.new(1, 1, 1), TextSize = 13, Font = Enum.Font.GothamBlack}, 12)
+local StatusLbl = ui("TextLabel", {Parent = Auth, Size = UDim2.new(1, -44, 0, 42), Position = UDim2.new(0, 22, 0, 162), BackgroundColor3 = Card, Text = "Status: Waiting", TextColor3 = Color3.fromRGB(235, 235, 245), TextSize = 11, Font = Enum.Font.GothamBold, TextWrapped = true}, 10, Color3.fromRGB(85, 15, 24), 1.2)
+
+local Main = ui("Frame", {Parent = SG, Size = UDim2.new(0, 344, 0, 214), Position = UDim2.new(0.5, -172, 0.5, -107), BackgroundColor3 = Dark, BorderSizePixel = 0, Visible = false, Active = true}, 18, Red, 2.4)
+ui("TextLabel", {Parent = Main, Size = UDim2.new(1, -24, 0, 38), Position = UDim2.new(0, 12, 0, 12), BackgroundTransparency = 1, Text = "KEY 20 ACTIVE", TextColor3 = Color3.fromRGB(255, 55, 70), TextSize = 15, Font = Enum.Font.GothamBlack})
+local TimerLbl = ui("TextLabel", {Parent = Main, Size = UDim2.new(1, -44, 0, 48), Position = UDim2.new(0, 22, 0, 60), BackgroundColor3 = Card, Text = "30s", TextColor3 = Color3.new(1, 1, 1), TextSize = 20, Font = Enum.Font.GothamBlack}, 12, Color3.fromRGB(115, 16, 26), 1.4)
+local StateLbl = ui("TextLabel", {Parent = Main, Size = UDim2.new(1, -44, 0, 30), Position = UDim2.new(0, 22, 0, 114), BackgroundTransparency = 1, Text = "State: Running", TextColor3 = Color3.fromRGB(190, 190, 205), TextSize = 11, Font = Enum.Font.GothamBold})
+local TestBtn = ui("TextButton", {Parent = Main, Size = UDim2.new(1, -44, 0, 42), Position = UDim2.new(0, 22, 0, 150), BackgroundColor3 = Color3.fromRGB(25, 14, 22), Text = "Test Action: OFF", TextColor3 = Color3.new(1, 1, 1), TextSize = 12, Font = Enum.Font.GothamBlack}, 10, Color3.fromRGB(205, 20, 38), 1.4)
+
+drag(Auth, Auth)
+drag(Main, Main)
+
+local TARGET_KEY = "20"
+local DEFAULT_DURATION = 30
+local CTRL_FILE = "DarkfulControl_20.txt"
+
+local function getCtrl()
+	local g = (type(getgenv) == "function" and getgenv()) or _G
+	if type(g.__DarkfulKeyCtrl) ~= "table" then
+		g.__DarkfulKeyCtrl = {
+			disabled = false,
+			paused = false,
+			burned = false,
+			rem = DEFAULT_DURATION
+		}
+	end
+	if shared then
+		if type(shared.__DarkfulKeyCtrl) ~= "table" then
+			shared.__DarkfulKeyCtrl = g.__DarkfulKeyCtrl
+		else
+			g.__DarkfulKeyCtrl = shared.__DarkfulKeyCtrl
+		end
+	end
+	return g.__DarkfulKeyCtrl
+end
+
+local ctrl = getCtrl()
+
+local function syncFromFile()
+	pcall(function()
+		if type(isfile) == "function" and type(readfile) == "function" and isfile(CTRL_FILE) then
+			local raw = tostring(readfile(CTRL_FILE) or "")
+			local d = string.match(raw, "disabled=(%a+)")
+			local p = string.match(raw, "paused=(%a+)")
+			local b = string.match(raw, "burned=(%a+)")
+			local r = tonumber(string.match(raw, "rem=([%d%.]+)"))
+			if d ~= nil then ctrl.disabled = (d == "true") end
+			if p ~= nil then ctrl.paused = (p == "true") end
+			if b ~= nil then ctrl.burned = (b == "true") end
+			if r ~= nil then ctrl.rem = math.max(0, r) end
+		end
+	end)
+end
+
+local function saveToFile()
+	pcall(function()
+		if type(writefile) == "function" then
+			local data = string.format(
+				"disabled=%s\npaused=%s\nburned=%s\nrem=%.3f",
+				tostring(ctrl.disabled),
+				tostring(ctrl.paused),
+				tostring(ctrl.burned),
+				math.max(0, tonumber(ctrl.rem) or 0)
+			)
+			writefile(CTRL_FILE, data)
+		end
+	end)
+end
+
+local sessionActive = false
+local lastSave = 0
+local lastFileSync = 0
+local testOn = false
+
+local function lockOut(msg)
+	sessionActive = false
+	testOn = false
+	TestBtn.Text = "Test Action: OFF"
+	TestBtn.BackgroundColor3 = Color3.fromRGB(25, 14, 22)
+	Main.Visible = false
+	Auth.Visible = true
+	StatusLbl.Text = msg
+end
+
+TestBtn.MouseButton1Click:Connect(function()
+	if not sessionActive or ctrl.paused or ctrl.disabled or ctrl.burned then return end
+	testOn = not testOn
+	TestBtn.Text = testOn and "Test Action: ON" or "Test Action: OFF"
+	TestBtn.BackgroundColor3 = testOn and Color3.fromRGB(220, 22, 42) or Color3.fromRGB(25, 14, 22)
+end)
+
+Enter.MouseButton1Click:Connect(function()
+	syncFromFile()
+	local k = string.gsub(tostring(Pass.Text or ""), "%s+", "")
+	Pass.Text = ""
+	if k == "" then
+		StatusLbl.Text = "Status: Enter Key 20"
+		return
+	end
+	if k ~= TARGET_KEY then
+		StatusLbl.Text = "Status: Invalid Key"
+		return
+	end
+	if ctrl.disabled then
+		StatusLbl.Text = "Status: Key 20 Disabled"
+		return
+	end
+	if ctrl.burned or (tonumber(ctrl.rem) or 0) <= 0 then
+		ctrl.burned = true
+		saveToFile()
+		StatusLbl.Text = "Status: Key 20 Expired / Burned"
+		return
+	end
+	sessionActive = true
+	Auth.Visible = false
+	Main.Visible = true
+	StatusLbl.Text = "Status: Active"
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+	if os.clock() - lastFileSync >= 0.25 then
+		lastFileSync = os.clock()
+		syncFromFile()
+	end
+
+	if sessionActive then
+		if ctrl.disabled then
+			lockOut("Status: Key 20 Disabled by Controller")
+			return
+		end
+		if ctrl.burned then
+			lockOut("Status: Key 20 Burned / Expired")
+			return
+		end
+		if ctrl.paused then
+			StateLbl.Text = "State: Paused (Stopped)"
+			TimerLbl.Text = tostring(math.ceil(math.max(0, ctrl.rem))) .. "s"
+			return
+		end
+
+		StateLbl.Text = "State: Running"
+		ctrl.rem = math.max(0, (tonumber(ctrl.rem) or 0) - dt)
+		TimerLbl.Text = tostring(math.ceil(ctrl.rem)) .. "s"
+
+		if os.clock() - lastSave >= 0.25 then
+			lastSave = os.clock()
+			saveToFile()
+		end
+
+		if ctrl.rem <= 0 then
+			ctrl.burned = true
+			ctrl.rem = 0
+			saveToFile()
+			lockOut("Status: Key 20 Finished & Burned")
+		end
+	else
+		if ctrl.disabled then
+			StatusLbl.Text = "Status: Key 20 Disabled"
+		elseif ctrl.burned then
+			StatusLbl.Text = "Status: Key 20 Expired / Burned"
+		elseif ctrl.paused then
+			StatusLbl.Text = "Status: Key 20 Paused (" .. tostring(math.ceil(math.max(0, ctrl.rem))) .. "s)"
+		end
+	end
+end)
+
+SG.Destroying:Connect(function()
+	saveToFile()
+end)
