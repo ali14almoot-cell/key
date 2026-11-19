@@ -1,5 +1,5 @@
 disabled=false
 paused=false
 burned=false
-rem=30
-version=1
+rem=600
+version=2
