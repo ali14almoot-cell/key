@@ -1,5 +1,5 @@
 disabled=false
-paused=false
+paused=true
 burned=false
 rem=420
-version=4
+version=5
