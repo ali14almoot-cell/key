@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local TS = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
 
 local Cam = workspace.CurrentCamera
 local LP = Players.LocalPlayer
@@ -14,6 +15,7 @@ if pg:FindFirstChild("DarkfulBQMStreetUI") then
 end
 
 local KEYS_URL = "https://raw.githubusercontent.com/ali14almoot-cell/key/refs/heads/main/key"
+local SAVE_FILE = "DarkDestroyer_KeyState_" .. tostring(LP.UserId) .. ".json"
 
 local keysDb = {
 	["10"] = {key = "10", duration = "1d", status = "active"}
@@ -82,6 +84,32 @@ end
 
 task.spawn(loadRemoteKeys)
 
+local function readSavedState()
+	if type(isfile) == "function" and type(readfile) == "function" then
+		local ok, exists = pcall(isfile, SAVE_FILE)
+		if ok and exists then
+			local rOk, content = pcall(readfile, SAVE_FILE)
+			if rOk and type(content) == "string" and content ~= "" then
+				local dOk, decoded = pcall(function()
+					return HttpService:JSONDecode(content)
+				end)
+				if dOk and type(decoded) == "table" then
+					return decoded
+				end
+			end
+		end
+	end
+	return {}
+end
+
+local function writeSavedState(tbl)
+	if type(writefile) == "function" then
+		pcall(function()
+			writefile(SAVE_FILE, HttpService:JSONEncode(tbl))
+		end)
+	end
+end
+
 local activeKey = nil
 local keyExpireAt = nil
 
@@ -92,7 +120,7 @@ local function getRemainingText()
 	if activeKey.infinite or not keyExpireAt then
 		return activeKey.key .. " | LIFETIME"
 	end
-	local rem = math.max(0, math.floor(keyExpireAt - os.clock()))
+	local rem = math.max(0, math.floor(keyExpireAt - os.time()))
 	local d = math.floor(rem / 86400)
 	local h = math.floor((rem % 86400) / 3600)
 	local m = math.floor((rem % 3600) / 60)
@@ -101,6 +129,37 @@ local function getRemainingText()
 		return string.format("%s | %dd %02dh %02dm", activeKey.key, d, h, m)
 	end
 	return string.format("%s | %02d:%02d:%02d", activeKey.key, h, m, s)
+end
+
+local function activateKeyEntry(entry)
+	local secs, isInf = parseDuration(entry.duration)
+	local state = readSavedState()
+	local kLower = string.lower(entry.key)
+	local now = os.time()
+
+	if isInf then
+		activeKey = {key = entry.key, infinite = true}
+		keyExpireAt = nil
+		state[kLower] = {key = entry.key, infinite = true, expireAt = nil}
+		writeSavedState(state)
+		return true
+	end
+
+	local saved = state[kLower]
+	if saved and type(saved.expireAt) == "number" and saved.expireAt > now then
+		activeKey = {key = entry.key, infinite = false}
+		keyExpireAt = saved.expireAt
+		return true
+	elseif saved and type(saved.expireAt) == "number" and saved.expireAt <= now then
+		return false, "EXPIRED"
+	end
+
+	local exp = now + secs
+	activeKey = {key = entry.key, infinite = false}
+	keyExpireAt = exp
+	state[kLower] = {key = entry.key, infinite = false, expireAt = exp}
+	writeSavedState(state)
+	return true
 end
 
 local SG = Instance.new("ScreenGui")
@@ -838,18 +897,23 @@ local function checkKeyEntry()
 	local lower = string.lower(firstPart)
 	local entry = keysDb[lower]
 	if entry and entry.status == "active" then
-		local secs, isInf = parseDuration(entry.duration)
-		activeKey = {key = entry.key, infinite = isInf}
-		keyExpireAt = isInf and nil or (os.clock() + secs)
-		local tStr = getRemainingText()
-		KeyBadge.Text = tStr
-		TopTimerLbl.Text = tStr
-		TopTimerBar.Visible = true
-		realPass = ""
-		Pass.Text = ""
-		Auth.Visible = false
-		LangBox.Visible = true
-		snd(SFX.ok, 1.1, 1.6)
+		local okAct, reason = activateKeyEntry(entry)
+		if okAct then
+			local tStr = getRemainingText()
+			KeyBadge.Text = tStr
+			TopTimerLbl.Text = tStr
+			TopTimerBar.Visible = true
+			realPass = ""
+			Pass.Text = ""
+			Auth.Visible = false
+			LangBox.Visible = true
+			snd(SFX.ok, 1.1, 1.6)
+		else
+			snd(SFX.err, 0.9, 1.8)
+			realPass = ""
+			Pass.Text = ""
+			Pass.PlaceholderText = reason or "EXPIRED"
+		end
 	else
 		snd(SFX.err, 0.9, 1.8)
 		realPass = ""
@@ -1239,9 +1303,18 @@ RunService.RenderStepped:Connect(function(dt)
 	if timerTick >= 0.5 then
 		timerTick = 0
 		if activeKey then
-			local tStr = getRemainingText()
-			KeyBadge.Text = tStr
-			TopTimerLbl.Text = tStr
+			if not activeKey.infinite and keyExpireAt and os.time() >= keyExpireAt then
+				activeKey = nil
+				TopTimerBar.Visible = false
+				Main.Visible = false
+				Tog.Visible = false
+				Auth.Visible = true
+				Pass.PlaceholderText = "EXPIRED"
+			else
+				local tStr = getRemainingText()
+				KeyBadge.Text = tStr
+				TopTimerLbl.Text = tStr
+			end
 		end
 	end
 
