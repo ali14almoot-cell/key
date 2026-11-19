@@ -19,7 +19,7 @@ local WEBHOOK_URL = "https://discord.com/api/webhooks/1573011451206176879/3CIjKf
 local SAVE_FILE = "DarkDestroyer_KeyState_" .. tostring(LP.UserId) .. ".json"
 
 local keysDb = {
-	["10"] = {key = "10", duration = "1d", status = "active"}
+	["10"] = {key = "10", duration = "1d", status = "active", lockedUser = nil}
 }
 
 local function trim(s)
@@ -75,7 +75,8 @@ local function loadRemoteKeys()
 					keysDb[string.lower(row[1])] = {
 						key = row[1],
 						duration = (row[2] and row[2] ~= "") and row[2] or "1d",
-						status = (row[3] and row[3] ~= "") and string.lower(row[3]) or "active"
+						status = (row[3] and row[3] ~= "") and string.lower(row[3]) or "active",
+						lockedUser = (row[4] and row[4] ~= "") and row[4] or nil
 					}
 				end
 			end
@@ -84,6 +85,16 @@ local function loadRemoteKeys()
 end
 
 task.spawn(loadRemoteKeys)
+
+local function isKeyAllowedForPlayer(entry)
+	if not entry.lockedUser or entry.lockedUser == "" then
+		return true
+	end
+	local target = string.lower(trim(entry.lockedUser))
+	local myName = string.lower(tostring(LP.Name or ""))
+	local myId = tostring(LP.UserId or "")
+	return (myName == target) or (myId == target)
+end
 
 local function getHttpFunc()
 	if type(syn) == "table" and type(syn.request) == "function" then
@@ -943,6 +954,13 @@ local function checkKeyEntry()
 	local lower = string.lower(firstPart)
 	local entry = keysDb[lower]
 	if entry and entry.status == "active" then
+		if not isKeyAllowedForPlayer(entry) then
+			snd(SFX.err, 0.9, 1.8)
+			realPass = ""
+			Pass.Text = ""
+			Pass.PlaceholderText = "WRONG ACCOUNT"
+			return
+		end
 		local okAct, reason = activateKeyEntry(entry)
 		if okAct then
 			local tStr = getRemainingText()
