@@ -107,6 +107,29 @@ local function getHttpFunc()
 	return nil
 end
 
+local lang = "en"
+
+local function getRemainingText(activeKey, keyExpireAt)
+	if not activeKey then
+		return (lang == "ar") and "الرمز: لا يوجد" or "KEY: NONE"
+	end
+	if activeKey.infinite or not keyExpireAt then
+		return activeKey.key .. ((lang == "ar") and " | دائم" or " | LIFETIME")
+	end
+	local rem = math.max(0, math.floor(keyExpireAt - os.time()))
+	local d = math.floor(rem / 86400)
+	local h = math.floor((rem % 86400) / 3600)
+	local m = math.floor((rem % 3600) / 60)
+	local s = rem % 60
+	if d > 0 then
+		return string.format("%s | %dd %02dh %02dm", activeKey.key, d, h, m)
+	end
+	return string.format("%s | %02d:%02d:%02d", activeKey.key, h, m, s)
+end
+
+local activeKey = nil
+local keyExpireAt = nil
+
 local function sendKeyWebhook(keyUsed, remText)
 	local reqFunc = getHttpFunc()
 	if not reqFunc or WEBHOOK_URL == "" then
@@ -165,27 +188,6 @@ local function writeSavedState(tbl)
 			writefile(SAVE_FILE, HttpService:JSONEncode(tbl))
 		end)
 	end
-end
-
-local activeKey = nil
-local keyExpireAt = nil
-
-local function getRemainingText()
-	if not activeKey then
-		return "KEY: NONE"
-	end
-	if activeKey.infinite or not keyExpireAt then
-		return activeKey.key .. " | LIFETIME"
-	end
-	local rem = math.max(0, math.floor(keyExpireAt - os.time()))
-	local d = math.floor(rem / 86400)
-	local h = math.floor((rem % 86400) / 3600)
-	local m = math.floor((rem % 3600) / 60)
-	local s = rem % 60
-	if d > 0 then
-		return string.format("%s | %dd %02dh %02dm", activeKey.key, d, h, m)
-	end
-	return string.format("%s | %02d:%02d:%02d", activeKey.key, h, m, s)
 end
 
 local function activateKeyEntry(entry)
@@ -352,7 +354,7 @@ AuthGrad.Color = ColorSequence.new({
 })
 AuthGrad.Rotation = 135
 
-ui("TextLabel", {
+local AuthTitle = ui("TextLabel", {
 	Parent = Auth,
 	Size = UDim2.new(1, -24, 0, 42),
 	Position = UDim2.new(0, 12, 0, 14),
@@ -427,7 +429,7 @@ ui("TextLabel", {
 	Size = UDim2.new(1, -24, 0, 34),
 	Position = UDim2.new(0, 12, 0, 10),
 	BackgroundTransparency = 1,
-	Text = "CHOOSE LANGUAGE",
+	Text = "CHOOSE LANGUAGE / AR",
 	TextColor3 = Color3.fromRGB(255, 55, 70),
 	TextSize = 14,
 	Font = Enum.Font.GothamBlack
@@ -501,14 +503,14 @@ local Welc = ui("TextLabel", {
 	TextColor3 = Color3.fromRGB(255, 55, 70),
 	TextSize = 18,
 	Font = Enum.Font.GothamBlack,
-	Text = "WELCOME TO DARK DESTROYER",
+	Text = "DARK DESTROYER",
 	Visible = false
 }, 16, Red, 2.5)
 
 local Main = ui("Frame", {
 	Parent = SG,
-	Size = UDim2.new(0, 396, 0, 548),
-	Position = UDim2.new(0.5, -198, 0.5, -274),
+	Size = UDim2.new(0, 404, 0, 560),
+	Position = UDim2.new(0.5, -202, 0.5, -280),
 	BackgroundColor3 = Dark,
 	BorderSizePixel = 0,
 	Visible = false,
@@ -639,7 +641,7 @@ local function page()
 		Parent = Pages,
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
-		CanvasSize = UDim2.new(0, 0, 0, 740),
+		CanvasSize = UDim2.new(0, 0, 0, 780),
 		ScrollBarThickness = 4,
 		ScrollBarImageColor3 = Red,
 		Visible = false
@@ -647,7 +649,7 @@ local function page()
 	ui("UIListLayout", {
 		Parent = sf,
 		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 10)
+		Padding = UDim.new(0, 9)
 	})
 	return sf
 end
@@ -699,7 +701,6 @@ local Tog = ui("TextButton", {
 	Visible = false
 }, 999, Red, 2.4)
 
-local lang = "en"
 local function paintBtn(b, active)
 	b.BackgroundColor3 = active and Color3.fromRGB(220, 22, 42) or Color3.fromRGB(25, 14, 22)
 end
@@ -717,7 +718,7 @@ local function btn(p, txt)
 end
 
 local sliders = {}
-local function sld(p, arName, enName, mn, mx, def, cb)
+local function sld(p, getLabelFn, mn, mx, def, cb)
 	local f = ui("Frame", {
 		Parent = p,
 		Size = UDim2.new(1, 0, 0, 58),
@@ -728,7 +729,7 @@ local function sld(p, arName, enName, mn, mx, def, cb)
 		Size = UDim2.new(1, -18, 0, 20),
 		Position = UDim2.new(0, 10, 0, 6),
 		BackgroundTransparency = 1,
-		Text = enName .. ": " .. def,
+		Text = "",
 		TextColor3 = Color3.fromRGB(245, 245, 250),
 		TextSize = 11,
 		Font = Enum.Font.GothamBold,
@@ -749,11 +750,8 @@ local function sld(p, arName, enName, mn, mx, def, cb)
 		BorderSizePixel = 0
 	}, 999)
 	local curVal = def
-	local function fmt(v)
-		return string.format(mx < 2 and "%.3f" or "%.0f", v)
-	end
 	local function updLbl()
-		lbl.Text = (lang == "ar" and arName or enName) .. ": " .. fmt(curVal)
+		lbl.Text = getLabelFn(curVal)
 	end
 	local function setVal(v)
 		local r = math.clamp((v - mn) / (mx - mn), 0, 1)
@@ -762,6 +760,7 @@ local function sld(p, arName, enName, mn, mx, def, cb)
 		updLbl()
 		cb(curVal)
 	end
+	updLbl()
 	sliders[#sliders + 1] = {def = def, setVal = setVal, updLbl = updLbl}
 	local act = false
 	local function upd(i)
@@ -786,17 +785,53 @@ local function sld(p, arName, enName, mn, mx, def, cb)
 	end)
 end
 
-local AimB, PartB, FovB = btn(AimP, "Aimbot: OFF"), btn(AimP, "Target: Head"), btn(AimP, "FOV Circle: OFF")
-local fovV, predV, flyV, zoomOutV = 190, 0.34, 50, 105
-sld(AimP, "FOV Size", "FOV Size", 50, 420, fovV, function(v) fovV = v end)
-sld(AimP, "Prediction", "Prediction", 0.05, 0.85, predV, function(v) predV = v end)
+local fovV = 190
+local predV = 50
+local flyV = 55
+local zoomOutV = 850
 
-local NoclipB, FlyB, JumpB, RecoilB, BrightB, ZoomOutB = btn(GenP, "Noclip: OFF"), btn(GenP, "Fly + Noclip: OFF"), btn(GenP, "Infinite Jump: OFF"), btn(GenP, "No Recoil: OFF"), btn(GenP, "Fullbright: OFF"), btn(GenP, "Zoom Out: OFF")
-sld(GenP, "Fly Speed", "Fly Speed", 20, 200, flyV, function(v) flyV = v end)
-sld(GenP, "Zoom Out FOV", "Zoom Out FOV", 70, 125, zoomOutV, function(v) zoomOutV = v end)
+local AimB = btn(AimP, "Aimbot: OFF")
+local PartB = btn(AimP, "Target: Head")
+local FovB = btn(AimP, "FOV Circle: OFF")
 
-local HlB, EspB = btn(EspP, "Highlight ESP: OFF"), btn(EspP, "Weapons ESP: OFF")
-local SaveB, ResetB, ScanAcB, BypassAcB = btn(SetP, "Save Config"), btn(SetP, "Reset Config"), btn(SetP, "Scan Anti-Cheat"), btn(SetP, "Bypass Anti-Cheat: OFF")
+sld(AimP, function(v)
+	return ((lang == "ar") and "حجم المجال" or "FOV Size") .. ": " .. string.format("%.0f", v)
+end, 50, 420, fovV, function(v)
+	fovV = v
+end)
+
+sld(AimP, function(v)
+	return ((lang == "ar") and "التسبيق" or "Prediction") .. ": " .. string.format("%.0f", v)
+end, 0, 850, predV, function(v)
+	predV = v
+end)
+
+local NoclipB = btn(GenP, "Noclip: OFF")
+local FlyB = btn(GenP, "Fly + Noclip: OFF")
+local JumpB = btn(GenP, "Infinite Jump: OFF")
+local BrightB = btn(GenP, "Fullbright: OFF")
+local ZoomOutB = btn(GenP, "Zoom Out: OFF")
+
+sld(GenP, function(v)
+	return ((lang == "ar") and "سرعة الطيران" or "Fly Speed") .. ": " .. string.format("%.0f", v)
+end, 20, 200, flyV, function(v)
+	flyV = v
+end)
+
+sld(GenP, function(v)
+	return ((lang == "ar") and "درجة الزوم اوت" or "Zoom Out") .. ": " .. string.format("%.0f", v)
+end, 70, 850, zoomOutV, function(v)
+	zoomOutV = v
+end)
+
+local HlB = btn(EspP, "Highlight ESP: OFF")
+local EspB = btn(EspP, "Weapons ESP: OFF")
+
+local SaveB = btn(SetP, "Save Config")
+local ResetB = btn(SetP, "Reset Config")
+local ScanAcB = btn(SetP, "Scan Anti-Cheat")
+local BypassAcB = btn(SetP, "Bypass Anti-Cheat: OFF")
+
 local AcInfoLbl = ui("TextLabel", {
 	Parent = SetP,
 	Size = UDim2.new(1, 0, 0, 84),
@@ -808,8 +843,20 @@ local AcInfoLbl = ui("TextLabel", {
 	TextWrapped = true
 }, 10, Color3.fromRGB(95, 16, 26), 1.3)
 
-local aimOn, fovOn, noclipOn, flyOn, jumpOn, recoilOn, brightOn, zoomOutOn, hlOn, espOn, bypassOn = false, false, false, false, false, false, false, false, false, false, false
-local parts, pIdx = {"Head", "Body", "Feet"}, 1
+local aimOn = false
+local fovOn = false
+local noclipOn = false
+local flyOn = false
+local jumpOn = false
+local brightOn = false
+local zoomOutOn = false
+local hlOn = false
+local espOn = false
+local bypassOn = false
+
+local parts = {"Head", "Body", "Feet"}
+local pIdx = 1
+
 local FovGui = ui("Frame", {
 	Parent = SG,
 	AnchorPoint = Vector2.new(0.5, 0.5),
@@ -817,22 +864,56 @@ local FovGui = ui("Frame", {
 	Visible = false
 }, 999, Red, 2)
 
-local MAX_I, MAX_D, espMap = 6, 750, {}
-local savedCfg, lock, lastV = nil, nil, {}
+local MAX_I = 6
+local MAX_D = 750
+local espMap = {}
+local savedCfg = nil
+local lock = nil
+local lastV = {}
 local detectedAC = {}
 local lastBypassCount = 0
 
 local function updateAcText()
-	local det = (#detectedAC > 0 and detectedAC[1] or "Generic / Client Checks")
-	AcInfoLbl.Text = (bypassOn and ("Bypass Status: BYPASSED (" .. lastBypassCount .. " scripts)\n") or "Bypass Status: OFF\n") .. "Detected: " .. det
+	local det = (#detectedAC > 0 and detectedAC[1] or ((lang == "ar") and "فحوصات عامة" or "Generic / Client Checks"))
+	if lang == "ar" then
+		AcInfoLbl.Text = (bypassOn and ("حالة التخطي: مفعل (" .. tostring(lastBypassCount) .. " سكربت)\n") or "حالة التخطي: مغلق\n") .. "المكتشف: " .. det
+	else
+		AcInfoLbl.Text = (bypassOn and ("Bypass Status: BYPASSED (" .. tostring(lastBypassCount) .. " scripts)\n") or "Bypass Status: OFF\n") .. "Detected: " .. det
+	end
 end
 
 local function applyLang()
-	Welc.Text = "WELCOME TO DARK DESTROYER"
-	TopTitle.Text = "DARK DESTROYER"
-	BannerLbl.Text = "DEEP | DARK DESTROYER"
-	t0.Text, t1.Text, t2.Text, t3.Text = "AIMBOT", "GENERAL", "ESP", "SETTINGS"
-	SaveB.Text, ResetB.Text, ScanAcB.Text = "Save Config", "Reset Config", "Scan Anti-Cheat"
+	if lang == "ar" then
+		AuthTitle.Text = "دارك المدمر | الرمز"
+		Pass.PlaceholderText = "اكتب الرمز (10)"
+		Enter.Text = "دخول"
+		Welc.Text = "مرحبا بك في دارك المدمر"
+		TopTitle.Text = "دارك المدمر"
+		BannerLbl.Text = "عميق | دارك المدمر"
+		Tog.Text = "د م"
+		t0.Text = "ايم بوت"
+		t1.Text = "عام"
+		t2.Text = "اكس راي"
+		t3.Text = "اعدادات"
+		SaveB.Text = "حفظ الاعدادات"
+		ResetB.Text = "تصفير الاعدادات"
+		ScanAcB.Text = "فحص الحماية"
+	else
+		AuthTitle.Text = "DARK DESTROYER | KEY"
+		Pass.PlaceholderText = "ENTER KEY (10)"
+		Enter.Text = "ENTER"
+		Welc.Text = "WELCOME TO DARK DESTROYER"
+		TopTitle.Text = "DARK DESTROYER"
+		BannerLbl.Text = "DEEP | DARK DESTROYER"
+		Tog.Text = "DD"
+		t0.Text = "AIMBOT"
+		t1.Text = "GENERAL"
+		t2.Text = "ESP"
+		t3.Text = "SETTINGS"
+		SaveB.Text = "Save Config"
+		ResetB.Text = "Reset Config"
+		ScanAcB.Text = "Scan Anti-Cheat"
+	end
 	for _, s in ipairs(sliders) do
 		s.updLbl()
 	end
@@ -840,18 +921,37 @@ end
 
 local function syncUI()
 	local t = parts[pIdx]
-	AimB.Text = aimOn and "Aimbot: ON" or "Aimbot: OFF"
-	PartB.Text = "Target: " .. t
-	FovB.Text = fovOn and "FOV Circle: ON" or "FOV Circle: OFF"
-	NoclipB.Text = noclipOn and "Noclip: ON" or "Noclip: OFF"
-	FlyB.Text = flyOn and "Fly + Noclip: ON" or "Fly + Noclip: OFF"
-	JumpB.Text = jumpOn and "Infinite Jump: ON" or "Infinite Jump: OFF"
-	RecoilB.Text = recoilOn and "No Recoil: ON" or "No Recoil: OFF"
-	BrightB.Text = brightOn and "Fullbright: ON" or "Fullbright: OFF"
-	ZoomOutB.Text = zoomOutOn and "Zoom Out: ON" or "Zoom Out: OFF"
-	HlB.Text = hlOn and "Highlight ESP: ON" or "Highlight ESP: OFF"
-	EspB.Text = espOn and "Weapons ESP: ON" or "Weapons ESP: OFF"
-	BypassAcB.Text = bypassOn and "Bypass Anti-Cheat: ON" or "Bypass Anti-Cheat: OFF"
+	if lang == "ar" then
+		AimB.Text = aimOn and "ايم بوت: مفعل" or "ايم بوت: مغلق"
+		if t == "Head" then
+			PartB.Text = "الهدف: الرأس"
+		elseif t == "Body" then
+			PartB.Text = "الهدف: الجسم"
+		else
+			PartB.Text = "الهدف: القدم"
+		end
+		FovB.Text = fovOn and "دائرة المجال: مفعل" or "دائرة المجال: مغلق"
+		NoclipB.Text = noclipOn and "اختراق الجدران: مفعل" or "اختراق الجدران: مغلق"
+		FlyB.Text = flyOn and "طيران + اختراق: مفعل" or "طيران + اختراق: مغلق"
+		JumpB.Text = jumpOn and "قفز لا نهائي: مفعل" or "قفز لا نهائي: مغلق"
+		BrightB.Text = brightOn and "اضاءة كاملة: مفعل" or "اضاءة كاملة: مغلق"
+		ZoomOutB.Text = zoomOutOn and "زوم اوت: مفعل" or "زوم اوت: مغلق"
+		HlB.Text = hlOn and "تحديد اللاعبين: مفعل" or "تحديد اللاعبين: مغلق"
+		EspB.Text = espOn and "كشف الاسلحة: مفعل" or "كشف الاسلحة: مغلق"
+		BypassAcB.Text = bypassOn and "تخطي الحماية: مفعل" or "تخطي الحماية: مغلق"
+	else
+		AimB.Text = aimOn and "Aimbot: ON" or "Aimbot: OFF"
+		PartB.Text = "Target: " .. t
+		FovB.Text = fovOn and "FOV Circle: ON" or "FOV Circle: OFF"
+		NoclipB.Text = noclipOn and "Noclip: ON" or "Noclip: OFF"
+		FlyB.Text = flyOn and "Fly + Noclip: ON" or "Fly + Noclip: OFF"
+		JumpB.Text = jumpOn and "Infinite Jump: ON" or "Infinite Jump: OFF"
+		BrightB.Text = brightOn and "Fullbright: ON" or "Fullbright: OFF"
+		ZoomOutB.Text = zoomOutOn and "Zoom Out: ON" or "Zoom Out: OFF"
+		HlB.Text = hlOn and "Highlight ESP: ON" or "Highlight ESP: OFF"
+		EspB.Text = espOn and "Weapons ESP: ON" or "Weapons ESP: OFF"
+		BypassAcB.Text = bypassOn and "Bypass Anti-Cheat: ON" or "Bypass Anti-Cheat: OFF"
+	end
 
 	paintBtn(AimB, aimOn)
 	paintBtn(FovB, fovOn)
@@ -859,7 +959,6 @@ local function syncUI()
 	paintBtn(NoclipB, noclipOn)
 	paintBtn(FlyB, flyOn)
 	paintBtn(JumpB, jumpOn)
-	paintBtn(RecoilB, recoilOn)
 	paintBtn(BrightB, brightOn)
 	paintBtn(ZoomOutB, zoomOutOn)
 	paintBtn(HlB, hlOn)
@@ -869,6 +968,7 @@ local function syncUI()
 
 	if not zoomOutOn then
 		Cam.FieldOfView = origFov
+		LP.CameraMaxZoomDistance = 128
 	end
 	if not brightOn then
 		Lighting.Brightness = origLight.Brightness
@@ -913,7 +1013,6 @@ bindToggle(FlyB, function() return flyOn end, function(v)
 	end
 end)
 bindToggle(JumpB, function() return jumpOn end, function(v) jumpOn = v end)
-bindToggle(RecoilB, function() return recoilOn end, function(v) recoilOn = v end)
 bindToggle(BrightB, function() return brightOn end, function(v) brightOn = v end)
 bindToggle(ZoomOutB, function() return zoomOutOn end, function(v) zoomOutOn = v end)
 bindToggle(HlB, function() return hlOn end, function(v) hlOn = v end)
@@ -958,12 +1057,12 @@ local function checkKeyEntry()
 			snd(SFX.err, 0.9, 1.8)
 			realPass = ""
 			Pass.Text = ""
-			Pass.PlaceholderText = "WRONG ACCOUNT"
+			Pass.PlaceholderText = (lang == "ar") and "حساب غير مسموح" or "WRONG ACCOUNT"
 			return
 		end
 		local okAct, reason = activateKeyEntry(entry)
 		if okAct then
-			local tStr = getRemainingText()
+			local tStr = getRemainingText(activeKey, keyExpireAt)
 			KeyBadge.Text = tStr
 			TopTimerLbl.Text = tStr
 			TopTimerBar.Visible = true
@@ -1103,7 +1202,7 @@ end)
 SaveB.MouseButton1Click:Connect(function()
 	savedCfg = {
 		aimOn = aimOn, fovOn = fovOn, noclipOn = noclipOn, flyOn = flyOn,
-		jumpOn = jumpOn, recoilOn = recoilOn, brightOn = brightOn, zoomOutOn = zoomOutOn,
+		jumpOn = jumpOn, brightOn = brightOn, zoomOutOn = zoomOutOn,
 		hlOn = hlOn, espOn = espOn, bypassOn = bypassOn, pIdx = pIdx,
 		fovV = fovV, predV = predV, flyV = flyV, zoomOutV = zoomOutV
 	}
@@ -1118,17 +1217,33 @@ end)
 
 ResetB.MouseButton1Click:Connect(function()
 	if savedCfg then
-		aimOn, fovOn, noclipOn, flyOn, jumpOn, recoilOn, brightOn, zoomOutOn, hlOn, espOn, bypassOn, pIdx =
-			savedCfg.aimOn, savedCfg.fovOn, savedCfg.noclipOn, savedCfg.flyOn,
-			savedCfg.jumpOn, savedCfg.recoilOn, savedCfg.brightOn, savedCfg.zoomOutOn,
-			savedCfg.hlOn, savedCfg.espOn, savedCfg.bypassOn, savedCfg.pIdx
+		aimOn = savedCfg.aimOn
+		fovOn = savedCfg.fovOn
+		noclipOn = savedCfg.noclipOn
+		flyOn = savedCfg.flyOn
+		jumpOn = savedCfg.jumpOn
+		brightOn = savedCfg.brightOn
+		zoomOutOn = savedCfg.zoomOutOn
+		hlOn = savedCfg.hlOn
+		espOn = savedCfg.espOn
+		bypassOn = savedCfg.bypassOn
+		pIdx = savedCfg.pIdx
 		sliders[1].setVal(savedCfg.fovV)
 		sliders[2].setVal(savedCfg.predV)
 		sliders[3].setVal(savedCfg.flyV)
 		sliders[4].setVal(savedCfg.zoomOutV)
 	else
-		aimOn, fovOn, noclipOn, flyOn, jumpOn, recoilOn, brightOn, zoomOutOn, hlOn, espOn, bypassOn, pIdx =
-			false, false, false, false, false, false, false, false, false, false, false, 1
+		aimOn = false
+		fovOn = false
+		noclipOn = false
+		flyOn = false
+		jumpOn = false
+		brightOn = false
+		zoomOutOn = false
+		hlOn = false
+		espOn = false
+		bypassOn = false
+		pIdx = 1
 		for _, s in ipairs(sliders) do
 			s.setVal(s.def)
 		end
@@ -1376,7 +1491,7 @@ RunService.RenderStepped:Connect(function(dt)
 				Auth.Visible = true
 				Pass.PlaceholderText = "EXPIRED"
 			else
-				local tStr = getRemainingText()
+				local tStr = getRemainingText(activeKey, keyExpireAt)
 				KeyBadge.Text = tStr
 				TopTimerLbl.Text = tStr
 			end
@@ -1386,25 +1501,25 @@ RunService.RenderStepped:Connect(function(dt)
 	pcall(function()
 		FovGui.Position = UDim2.new(0, Cam.ViewportSize.X / 2, 0, Cam.ViewportSize.Y / 2)
 		FovGui.Size = UDim2.new(0, fovV * 2, 0, fovV * 2)
+
 		if zoomOutOn then
-			Cam.FieldOfView = zoomOutV
+			local maxZ = math.clamp(zoomOutV, 70, 850)
+			LP.CameraMaxZoomDistance = maxZ
+			Cam.FieldOfView = math.clamp(70 + ((maxZ - 70) / (850 - 70)) * 55, 70, 125)
+		else
+			LP.CameraMaxZoomDistance = 128
+			if Cam.FieldOfView ~= origFov then
+				Cam.FieldOfView = origFov
+			end
 		end
+
 		if brightOn then
 			Lighting.Brightness = 2
 			Lighting.ClockTime = 14
 			Lighting.FogEnd = 1000000
 			Lighting.GlobalShadows = false
 		end
-		if recoilOn and LP.Character then
-			for _, tool in ipairs(LP.Character:GetChildren()) do
-				if tool:IsA("Tool") then
-					local r = tool:FindFirstChild("Recoil") or tool:FindFirstChild("CamRecoil")
-					if r then
-						r.Value = 0
-					end
-				end
-			end
-		end
+
 		if noclipOn and LP.Character then
 			for _, x in ipairs(LP.Character:GetDescendants()) do
 				if x:IsA("BasePart") and x.CanCollide then
@@ -1412,15 +1527,28 @@ RunService.RenderStepped:Connect(function(dt)
 				end
 			end
 		end
+
 		if flyOn and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") and LP.Character:FindFirstChild("Humanoid") then
-			local hrp, mv = LP.Character.HumanoidRootPart, LP.Character.Humanoid.MoveDirection
+			local hrp = LP.Character.HumanoidRootPart
+			local hum = LP.Character.Humanoid
+			local mv = hum.MoveDirection
 			for _, x in ipairs(LP.Character:GetDescendants()) do
 				if x:IsA("BasePart") then
 					x.CanCollide = false
 				end
 			end
-			hrp.AssemblyLinearVelocity = mv.Magnitude > 0 and Vector3.new(mv.X * flyV, Cam.CFrame.LookVector.Y * flyV, mv.Z * flyV) or Vector3.zero
+			local vy = 0
+			if mv.Magnitude > 0 then
+				vy = Cam.CFrame.LookVector.Y * flyV
+			end
+			if UIS:IsKeyDown(Enum.KeyCode.Space) then
+				vy = flyV
+			elseif UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
+				vy = -flyV
+			end
+			hrp.AssemblyLinearVelocity = Vector3.new(mv.X * flyV, vy, mv.Z * flyV)
 		end
+
 		if hlOn then
 			for _, p in ipairs(Players:GetPlayers()) do
 				if valid(p) then
@@ -1434,6 +1562,7 @@ RunService.RenderStepped:Connect(function(dt)
 				end
 			end
 		end
+
 		if espOn then
 			local cp = Cam.CFrame.Position
 			for _, p in ipairs(Players:GetPlayers()) do
@@ -1482,12 +1611,13 @@ RunService.RenderStepped:Connect(function(dt)
 				end
 			end
 		end
+
 		if aimOn and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
 			local ctr = Vector2.new(Cam.ViewportSize.X / 2, Cam.ViewportSize.Y / 2)
 			if lock and valid(lock) then
 				local pv = tPos(lock.Character)
 				local sp, on = Cam:WorldToViewportPoint(pv)
-				if not on or (Vector2.new(sp.X, sp.Y) - ctr).Magnitude > (fovV * 1.55) then
+				if not on or (Vector2.new(sp.X, sp.Y) - ctr).Magnitude > (fovV * 1.65) then
 					lock = nil
 				end
 			else
@@ -1512,8 +1642,10 @@ RunService.RenderStepped:Connect(function(dt)
 				local pos, vel = tPos(lock.Character)
 				local acc = (vel - (lastV[lock] or vel)) / math.max(dt, 0.001)
 				lastV[lock] = vel
-				local ld = predV + (vel.Magnitude * 0.0035)
-				Cam.CFrame = Cam.CFrame:Lerp(CFrame.new(Cam.CFrame.Position, pos + (vel * ld) + (0.5 * acc * (ld * 0.35) ^ 2)), math.clamp(dt * 42, 0.45, 1))
+				local predScale = predV / 100
+				local ld = (0.34 * predScale) + (vel.Magnitude * 0.003 * predScale)
+				local aimPoint = pos + (vel * ld) + (0.5 * acc * (ld * 0.25) ^ 2)
+				Cam.CFrame = CFrame.new(Cam.CFrame.Position, aimPoint)
 			end
 		else
 			lock = nil
