@@ -641,7 +641,7 @@ local function page()
 		Parent = Pages,
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
-		CanvasSize = UDim2.new(0, 0, 0, 780),
+		CanvasSize = UDim2.new(0, 0, 0, 820),
 		ScrollBarThickness = 4,
 		ScrollBarImageColor3 = Red,
 		Visible = false
@@ -872,6 +872,25 @@ local lock = nil
 local lastV = {}
 local detectedAC = {}
 local lastBypassCount = 0
+
+local function isVisible(char, targetPos)
+	local origin = Cam.CFrame.Position
+	local direction = targetPos - origin
+	local dist = direction.Magnitude
+	if dist <= 0.01 then return true end
+	local rp = RaycastParams.new()
+	rp.FilterType = Enum.RaycastFilterType.Exclude
+	local ignore = {}
+	if LP.Character then table.insert(ignore, LP.Character) end
+	if char then table.insert(ignore, char) end
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character then table.insert(ignore, p.Character) end
+	end
+	rp.FilterDescendantsInstances = ignore
+	rp.IgnoreWater = true
+	local hit = workspace:Raycast(origin, direction, rp)
+	return hit == nil
+end
 
 local function updateAcText()
 	local det = (#detectedAC > 0 and detectedAC[1] or ((lang == "ar") and "فحوصات عامة" or "Generic / Client Checks"))
@@ -1362,7 +1381,7 @@ local function getEsp(plr)
 	end
 	local h = ui("Frame", {
 		Parent = Overlay,
-		Size = UDim2.new(0, MAX_I * 88, 0, 46),
+		Size = UDim2.new(0, MAX_I * 74, 0, 38),
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundTransparency = 1,
 		Visible = false
@@ -1372,25 +1391,25 @@ local function getEsp(plr)
 		FillDirection = Enum.FillDirection.Horizontal,
 		HorizontalAlignment = Enum.HorizontalAlignment.Center,
 		VerticalAlignment = Enum.VerticalAlignment.Center,
-		Padding = UDim.new(0, 6)
+		Padding = UDim.new(0, 4)
 	})
 	local slots = {}
 	for i = 1, MAX_I do
 		local box = ui("Frame", {
 			Parent = h,
-			Size = UDim2.new(0, 42, 0, 42),
+			Size = UDim2.new(0, 34, 0, 34),
 			BackgroundColor3 = Color3.fromRGB(13, 13, 20),
 			BackgroundTransparency = 0.12,
 			BorderSizePixel = 0,
 			Visible = false
-		}, 8)
+		}, 7)
 		local st = Instance.new("UIStroke", box)
-		st.Thickness = 2.3
+		st.Thickness = 2
 		st.Color = tiers.legendary
 		local img = ui("ImageLabel", {
 			Parent = box,
-			Size = UDim2.new(1, -6, 1, -6),
-			Position = UDim2.new(0, 3, 0, 3),
+			Size = UDim2.new(1, -4, 1, -4),
+			Position = UDim2.new(0, 2, 0, 2),
 			BackgroundTransparency = 1,
 			ScaleType = Enum.ScaleType.Fit,
 			ImageColor3 = Color3.new(1, 1, 1),
@@ -1398,11 +1417,11 @@ local function getEsp(plr)
 		})
 		local lbl = ui("TextLabel", {
 			Parent = box,
-			Size = UDim2.new(1, -6, 1, 0),
-			Position = UDim2.new(0, 3, 0, 0),
+			Size = UDim2.new(1, -4, 1, 0),
+			Position = UDim2.new(0, 2, 0, 0),
 			BackgroundTransparency = 1,
 			TextColor3 = Color3.new(1, 1, 1),
-			TextSize = 10,
+			TextSize = 9,
 			Font = Enum.Font.GothamBlack,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 			Visible = false
@@ -1575,7 +1594,7 @@ RunService.RenderStepped:Connect(function(dt)
 					if #ws > 0 and anc then
 						local sp, on = Cam:WorldToViewportPoint(head and (head.Position + Vector3.new(0, 1.35, 0)) or (hrp.Position + Vector3.new(0, 3, 0)))
 						e = getEsp(p)
-						e.h.Size = UDim2.new(0, math.max(88, #ws * 90), 0, 44)
+						e.h.Size = UDim2.new(0, math.max(74, #ws * 76), 0, 38)
 						e.h.ZIndex = math.clamp(math.floor(120 - math.min(dist, 100)), 20, 120)
 						if on and sp.Z > 0 and sp.Z <= MAX_D then
 							e.h.Visible = true
@@ -1586,12 +1605,12 @@ RunService.RenderStepped:Connect(function(dt)
 									sl.box.Visible = true
 									sl.st.Color = (p == lock) and Color3.fromRGB(0, 220, 255) or rarCol(wd.o, i)
 									if wd.img then
-										sl.box.Size = UDim2.new(0, 42, 0, 42)
+										sl.box.Size = UDim2.new(0, 34, 0, 34)
 										sl.img.Visible = true
 										sl.img.Image = wd.img
 										sl.lbl.Visible = false
 									else
-										sl.box.Size = UDim2.new(0, 84, 0, 28)
+										sl.box.Size = UDim2.new(0, 70, 0, 24)
 										sl.img.Visible = false
 										sl.lbl.Visible = true
 										sl.lbl.Text = wd.n
@@ -1614,38 +1633,38 @@ RunService.RenderStepped:Connect(function(dt)
 
 		if aimOn and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
 			local ctr = Vector2.new(Cam.ViewportSize.X / 2, Cam.ViewportSize.Y / 2)
-			if lock and valid(lock) then
-				local pv = tPos(lock.Character)
-				local sp, on = Cam:WorldToViewportPoint(pv)
-				if not on or (Vector2.new(sp.X, sp.Y) - ctr).Magnitude > (fovV * 1.65) then
-					lock = nil
-				end
-			else
-				lock = nil
-			end
-			if not lock then
-				local md = fovV
-				for _, p in ipairs(Players:GetPlayers()) do
-					if valid(p) then
-						local pv = tPos(p.Character)
-						local sp, on = Cam:WorldToViewportPoint(pv)
-						if on then
-							local d = (Vector2.new(sp.X, sp.Y) - ctr).Magnitude
-							if d < md then
-								md, lock = d, p
-							end
+			local bestPlr = nil
+			local bestPos = nil
+			local bestVel = nil
+			local md = fovV
+
+			for _, p in ipairs(Players:GetPlayers()) do
+				if valid(p) then
+					local pv, pvel = tPos(p.Character)
+					local sp, on = Cam:WorldToViewportPoint(pv)
+					if on and isVisible(p.Character, pv) then
+						local d = (Vector2.new(sp.X, sp.Y) - ctr).Magnitude
+						if d < md then
+							md = d
+							bestPlr = p
+							bestPos = pv
+							bestVel = pvel
 						end
 					end
 				end
 			end
-			if lock and lock.Character then
-				local pos, vel = tPos(lock.Character)
+
+			lock = bestPlr
+
+			if lock and lock.Character and bestPos then
+				local vel = bestVel or Vector3.zero
 				local acc = (vel - (lastV[lock] or vel)) / math.max(dt, 0.001)
 				lastV[lock] = vel
 				local predScale = predV / 100
 				local ld = (0.34 * predScale) + (vel.Magnitude * 0.003 * predScale)
-				local aimPoint = pos + (vel * ld) + (0.5 * acc * (ld * 0.25) ^ 2)
-				Cam.CFrame = CFrame.new(Cam.CFrame.Position, aimPoint)
+				local aimPoint = bestPos + (vel * ld) + (0.5 * acc * (ld * 0.25) ^ 2)
+				local targetCf = CFrame.new(Cam.CFrame.Position, aimPoint)
+				Cam.CFrame = Cam.CFrame:Lerp(targetCf, 0.85)
 			end
 		else
 			lock = nil
