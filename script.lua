@@ -727,12 +727,12 @@ local Pages = ui("Frame", {
 })
 
 local activeTabBtn = nil
-local function page()
+local function page(canvasH)
 	local sf = ui("ScrollingFrame", {
 		Parent = Pages,
 		Size = UDim2.new(1, 0, 1, 0),
 		BackgroundTransparency = 1,
-		CanvasSize = UDim2.new(0, 0, 0, 1060),
+		CanvasSize = UDim2.new(0, 0, 0, canvasH or 760),
 		ScrollBarThickness = 4,
 		ScrollBarImageColor3 = Accent,
 		Visible = false,
@@ -742,12 +742,12 @@ local function page()
 	ui("UIListLayout", {
 		Parent = sf,
 		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 9)
+		Padding = UDim.new(0, 8)
 	})
 	return sf
 end
 
-local AimP, GenP, EspP, SetP = page(), page(), page(), page()
+local AimP, GenP, EspP, SetP = page(420), page(720), page(240), page(280)
 AimP.Visible = true
 
 local tabs = {}
@@ -819,7 +819,7 @@ local sliders = {}
 local function sld(p, getLabelFn, mn, mx, def, cb)
 	local f = ui("Frame", {
 		Parent = p,
-		Size = UDim2.new(1, 0, 0, 58),
+		Size = UDim2.new(1, 0, 0, 56),
 		BackgroundColor3 = Card,
 		BackgroundTransparency = 0.18,
 		ZIndex = 5
@@ -840,7 +840,7 @@ local function sld(p, getLabelFn, mn, mx, def, cb)
 	local bar = ui("TextButton", {
 		Parent = f,
 		Size = UDim2.new(1, -22, 0, 10),
-		Position = UDim2.new(0, 11, 0, 37),
+		Position = UDim2.new(0, 11, 0, 36),
 		BackgroundColor3 = Color3.fromRGB(32, 32, 46),
 		Text = "",
 		AutoButtonColor = false,
@@ -966,7 +966,7 @@ local fovV = 190
 local predV = 50
 local speedV = 24
 local flyV = 55
-local zoomOutV = 550
+local zoomOutV = 240
 
 local AimB = btn(AimP, "ايم بوت | Aimbot: OFF")
 local PartB = btn(AimP, "الهدف | Target: Head")
@@ -1004,7 +1004,7 @@ end, 20, 200, flyV, function(v) flyV = v end)
 sld(GenP, function(v)
 	if not langChosen then return "درجة الزوم اوت | Zoom Out: " .. string.format("%.0f", v) end
 	return ((lang == "ar") and "درجة الزوم اوت" or "Zoom Out") .. ": " .. string.format("%.0f", v)
-end, 70, 850, zoomOutV, function(v) zoomOutV = v end)
+end, 25, 450, zoomOutV, function(v) zoomOutV = v end)
 
 local HlB = btn(EspP, "تحديد اللاعبين | Highlight: OFF")
 local EspB = btn(EspP, "كشف الاسلحة | Weapons ESP: OFF")
@@ -1014,11 +1014,12 @@ local DistEspB = btn(EspP, "كشف المسافة | Dist ESP: OFF")
 local ThemeB = btn(SetP, "الثيم | Theme: Crimson Neon")
 local FontB = btn(SetP, "الخط | Font: Gotham Bold")
 local SaveB = btn(SetP, "حفظ الاعدادات | Save Config")
+local LoadB = btn(SetP, "تحميل الاعدادات | Load Config")
 local ResetB = btn(SetP, "تصفير الاعدادات | Reset Config")
 
 local BrandInfoLbl = ui("TextLabel", {
 	Parent = SetP,
-	Size = UDim2.new(1, 0, 0, 56),
+	Size = UDim2.new(1, 0, 0, 44),
 	BackgroundColor3 = Card,
 	BackgroundTransparency = 0.18,
 	Text = "DARKFUL // DARK DESTROYER - BQM",
@@ -1062,6 +1063,80 @@ local infoEspMap = {}
 local savedCfg = nil
 local lock = nil
 local specTarget = nil
+
+local safeKeywords = {"safe", "spawn", "lobby", "peace", "zone", "protect", "shield", "greenzone", "no_pvp", "nopvp", "سلام", "امان", "سباون"}
+
+local function isInSafeOrSpawnZone(char)
+	if not char then return false end
+	local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+	if not hrp then return false end
+	local pos = hrp.Position
+	local overlap = OverlapParams.new()
+	overlap.FilterType = Enum.RaycastFilterType.Exclude
+	overlap.FilterDescendantsInstances = {char}
+	local partsInBox = workspace:GetPartBoundsInBox(CFrame.new(pos), Vector3.new(8, 8, 8), overlap)
+	for _, part in ipairs(partsInBox) do
+		local n = string.lower(tostring(part.Name or ""))
+		local pn = (part.Parent and string.lower(tostring(part.Parent.Name or ""))) or ""
+		for _, kw in ipairs(safeKeywords) do
+			if string.find(n, kw, 1, true) or string.find(pn, kw, 1, true) then
+				return true
+			end
+		end
+		if part.Transparency >= 0.85 and part.CanCollide == false and part.Size.Magnitude > 14 then
+			return true
+		end
+	end
+	return false
+end
+
+local visParams = RaycastParams.new()
+visParams.FilterType = Enum.RaycastFilterType.Exclude
+visParams.IgnoreWater = true
+
+local function rayClearToPoint(char, targetPos)
+	if not char or not targetPos then return false end
+	local origin = Cam.CFrame.Position
+	local delta = targetPos - origin
+	local dist = delta.Magnitude
+	if dist <= 0.4 then return true end
+
+	local excl = {}
+	if LP.Character then excl[#excl + 1] = LP.Character end
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Character and plr.Character ~= char then
+			excl[#excl + 1] = plr.Character
+		end
+	end
+	visParams.FilterDescendantsInstances = excl
+
+	local hit = workspace:Raycast(origin, delta.Unit * math.max(0, dist - 0.8), visParams)
+	if not hit then return true end
+	if hit.Instance and hit.Instance:IsDescendantOf(char) then return true end
+	return false
+end
+
+local function getAimPart(char)
+	local chosen = parts[pIdx]
+	if chosen == "Head" then
+		return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+	elseif chosen == "Feet" then
+		return char:FindFirstChild("LeftFoot") or char:FindFirstChild("RightFoot") or char:FindFirstChild("HumanoidRootPart")
+	else
+		return char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("HumanoidRootPart")
+	end
+end
+
+local function isTargetNotBehindWall(char, primaryPart)
+	if not char or not primaryPart then return false end
+	if isInSafeOrSpawnZone(char) then return false end
+	if rayClearToPoint(char, primaryPart.Position) then return true end
+	local head = char:FindFirstChild("Head")
+	if head and head ~= primaryPart and rayClearToPoint(char, head.Position) then return true end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if hrp and hrp ~= primaryPart and rayClearToPoint(char, hrp.Position) then return true end
+	return false
+end
 
 local Overlay = Instance.new("Frame")
 Overlay.Name = "Darkful2DEspOverlay"
@@ -1405,6 +1480,7 @@ local function applyLang()
 		t2.Text = "كشف | ESP"
 		t3.Text = "اعدادات | SET"
 		SaveB.Text = "حفظ الاعدادات | Save Config"
+		LoadB.Text = "تحميل الاعدادات | Load Config"
 		ResetB.Text = "تصفير الاعدادات | Reset Config"
 	elseif lang == "ar" then
 		AuthTitle.Text = "داركفول // دارك المدمر"
@@ -1423,6 +1499,7 @@ local function applyLang()
 		t2.Text = "كشف"
 		t3.Text = "اعدادات"
 		SaveB.Text = "حفظ الاعدادات"
+		LoadB.Text = "تحميل الاعدادات"
 		ResetB.Text = "تصفير الاعدادات"
 	else
 		AuthTitle.Text = "DARKFUL // DARK DESTROYER"
@@ -1441,6 +1518,7 @@ local function applyLang()
 		t2.Text = "ESP"
 		t3.Text = "SETTINGS"
 		SaveB.Text = "Save Config"
+		LoadB.Text = "Load Config"
 		ResetB.Text = "Reset Config"
 	end
 	applyTheme()
@@ -1494,11 +1572,17 @@ end
 local function applyZoomNow()
 	pcall(function()
 		if zoomOutOn then
-			local maxZ = math.clamp(zoomOutV, 70, 850)
+			local zDist = math.clamp(zoomOutV, 25, 450)
+			if Cam.CameraType == Enum.CameraType.Scriptable and not specOn then
+				Cam.CameraType = Enum.CameraType.Custom
+			end
 			LP.CameraMinZoomDistance = 0.5
-			LP.CameraMaxZoomDistance = maxZ
-			Cam.FieldOfView = math.clamp(70 + ((maxZ - 70) / (850 - 70)) * 50, 70, 120)
+			LP.CameraMaxZoomDistance = math.max(origMaxZoom, zDist)
+			Cam.FieldOfView = math.clamp(70 + ((zDist - 25) / (450 - 25)) * 32, 70, 102)
 		else
+			if Cam.CameraType == Enum.CameraType.Scriptable and not specOn then
+				Cam.CameraType = Enum.CameraType.Custom
+			end
 			LP.CameraMaxZoomDistance = origMaxZoom
 			LP.CameraMinZoomDistance = origMinZoom
 			Cam.FieldOfView = origFov
@@ -1811,10 +1895,44 @@ SaveB.MouseButton1Click:Connect(function()
 		aimOn = aimOn, fovOn = fovOn, noclipOn = noclipOn, flyOn = flyOn,
 		jumpOn = jumpOn, brightOn = brightOn, zoomOutOn = zoomOutOn, speedOn = speedOn,
 		stealthOn = stealthOn, hlOn = hlOn, espOn = espOn, healthEspOn = healthEspOn, distEspOn = distEspOn,
-		bypassOn = true, pIdx = pIdx, themeIdx = themeIdx, fontIdx = fontIdx,
+		pIdx = pIdx, themeIdx = themeIdx, fontIdx = fontIdx,
 		fovV = fovV, predV = predV, speedV = speedV, flyV = flyV, zoomOutV = zoomOutV
 	}
 	snd(SFX.save, 1.2, 1.8)
+end)
+
+LoadB.MouseButton1Click:Connect(function()
+	if not savedCfg then
+		snd(SFX.err, 0.95, 1.5)
+		return
+	end
+	aimOn = savedCfg.aimOn or false
+	fovOn = savedCfg.fovOn or false
+	noclipOn = savedCfg.noclipOn or false
+	flyOn = savedCfg.flyOn or false
+	jumpOn = savedCfg.jumpOn or false
+	brightOn = savedCfg.brightOn or false
+	zoomOutOn = savedCfg.zoomOutOn or false
+	speedOn = savedCfg.speedOn or false
+	stealthOn = savedCfg.stealthOn or false
+	hlOn = savedCfg.hlOn or false
+	espOn = savedCfg.espOn or false
+	healthEspOn = savedCfg.healthEspOn or false
+	distEspOn = savedCfg.distEspOn or false
+	pIdx = savedCfg.pIdx or 1
+	themeIdx = savedCfg.themeIdx or 1
+	fontIdx = savedCfg.fontIdx or 1
+	fovV = savedCfg.fovV or 190
+	predV = savedCfg.predV or 50
+	speedV = savedCfg.speedV or 24
+	flyV = savedCfg.flyV or 55
+	zoomOutV = savedCfg.zoomOutV or 240
+	local vals = {fovV, predV, speedV, flyV, zoomOutV}
+	for idx, s in ipairs(sliders) do
+		if vals[idx] then s.setVal(vals[idx]) end
+	end
+	syncUI()
+	snd(SFX.save, 1.25, 1.8)
 end)
 
 ResetB.MouseButton1Click:Connect(function()
@@ -1925,10 +2043,7 @@ RunService.RenderStepped:Connect(function(dt)
 		FovGui.Size = UDim2.new(0, fovV * 2, 0, fovV * 2)
 
 		if zoomOutOn then
-			local maxZ = math.clamp(zoomOutV, 70, 850)
-			if LP.CameraMinZoomDistance ~= 0.5 then LP.CameraMinZoomDistance = 0.5 end
-			if LP.CameraMaxZoomDistance ~= maxZ then LP.CameraMaxZoomDistance = maxZ end
-			Cam.FieldOfView = math.clamp(70 + ((maxZ - 70) / (850 - 70)) * 50, 70, 120)
+			applyZoomNow()
 		end
 
 		if brightOn then
@@ -2069,27 +2184,42 @@ RunService.RenderStepped:Connect(function(dt)
 
 		if aimOn and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
 			local ctr = Vector2.new(Cam.ViewportSize.X / 2, Cam.ViewportSize.Y / 2)
-			local chosenPos, md = nil, fovV
+			local bestPlr, bestPos, md = nil, nil, fovV
+
 			for _, p in ipairs(Players:GetPlayers()) do
 				if valid(p) then
-					local partName = (parts[pIdx] == "Head") and "Head" or "HumanoidRootPart"
-					local targetPart = p.Character:FindFirstChild(partName) or p.Character:FindFirstChild("HumanoidRootPart")
-					if targetPart then
+					local targetPart = getAimPart(p.Character)
+					if targetPart and isTargetNotBehindWall(p.Character, targetPart) then
 						local sp, on = Cam:WorldToViewportPoint(targetPart.Position)
 						if on and sp.Z > 0 then
 							local d = (Vector2.new(sp.X, sp.Y) - ctr).Magnitude
-							if d < md then
+							if d <= md then
 								md = d
-								chosenPos = targetPart.Position + (targetPart.AssemblyLinearVelocity * (predV / 300))
+								bestPlr = p
+								local vel = targetPart.AssemblyLinearVelocity
+								local hum = p.Character:FindFirstChildOfClass("Humanoid")
+								local isJumping = hum and (hum:GetState() == Enum.HumanoidStateType.Jumping or hum:GetState() == Enum.HumanoidStateType.Freefall)
+								local predScale = isJumping and 0.45 or 1.0
+								bestPos = targetPart.Position + (Vector3.new(vel.X, vel.Y * predScale, vel.Z) * (predV / 340))
 							end
 						end
 					end
 				end
 			end
-			if chosenPos then
-				local targetCf = CFrame.new(Cam.CFrame.Position, chosenPos)
-				Cam.CFrame = Cam.CFrame:Lerp(targetCf, 0.85)
+
+			lock = bestPlr
+
+			if bestPlr and bestPos then
+				local curLook = Cam.CFrame.LookVector
+				local desiredLook = (bestPos - Cam.CFrame.Position).Unit
+				local smoothAlpha = math.clamp(stepDt * 8.2, 0.05, 0.2)
+				local blendedLook = curLook:Lerp(desiredLook, smoothAlpha)
+				if blendedLook.Magnitude > 0.0001 then
+					Cam.CFrame = CFrame.lookAt(Cam.CFrame.Position, Cam.CFrame.Position + blendedLook.Unit)
+				end
 			end
+		else
+			lock = nil
 		end
 	end)
 end)
